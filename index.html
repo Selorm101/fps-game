@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>FPS Stage 1</title>
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; touch-action: none; }
+    canvas { display: block; }
+      #stick { position: fixed; left: 24px; bottom: 24px; width: 120px; height: 120px;
+                 border-radius: 50%; background: rgba(255,255,255,.15); border: 2px solid rgba(255,255,255,.4); }
+                   #knob { position: absolute; left: 40px; top: 40px; width: 40px; height: 40px;
+                             border-radius: 50%; background: rgba(255,255,255,.6); }
+                               #cross { position: fixed; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px;
+                                          border: 2px solid #fff; border-radius: 50%; opacity: .8; pointer-events: none; }
+                                          </style>
+                                          </head>
+                                          <body>
+                                          <div id="stick"><div id="knob"></div></div>
+                                          <div id="cross"></div>
+                                          <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+                                          <script>
+                                          // ---------- Scene ----------
+                                          const scene = new THREE.Scene();
+                                          scene.background = new THREE.Color(0x87ceeb);
+                                          scene.fog = new THREE.Fog(0x87ceeb, 20, 70);
+
+                                          const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 100);
+                                          camera.position.set(0, 1.6, 8);
+                                          camera.rotation.order = 'YXZ';
+
+                                          const renderer = new THREE.WebGLRenderer({ antialias: true });
+                                          renderer.setSize(innerWidth, innerHeight);
+                                          renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+                                          document.body.appendChild(renderer.domElement);
+
+                                          scene.add(new THREE.HemisphereLight(0xffffff, 0x556655, 0.9));
+                                          const sun = new THREE.DirectionalLight(0xffffff, 0.6);
+                                          sun.position.set(10, 20, 5);
+                                          scene.add(sun);
+
+                                          // ---------- World ----------
+                                          const floor = new THREE.Mesh(
+                                            new THREE.PlaneGeometry(60, 60),
+                                              new THREE.MeshLambertMaterial({ color: 0x4a7c3a })
+                                              );
+                                              floor.rotation.x = -Math.P
