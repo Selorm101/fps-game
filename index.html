@@ -5,43 +5,180 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <title>FPS Stage 1</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; touch-action: none; }
-    canvas { display: block; }
-      #stick { position: fixed; left: 24px; bottom: 24px; width: 120px; height: 120px;
-                 border-radius: 50%; background: rgba(255,255,255,.15); border: 2px solid rgba(255,255,255,.4); }
-                   #knob { position: absolute; left: 40px; top: 40px; width: 40px; height: 40px;
-                             border-radius: 50%; background: rgba(255,255,255,.6); }
-                               #cross { position: fixed; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px;
-                                          border: 2px solid #fff; border-radius: 50%; opacity: .8; pointer-events: none; }
-                                          </style>
-                                          </head>
-                                          <body>
-                                          <div id="stick"><div id="knob"></div></div>
-                                          <div id="cross"></div>
-                                          <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-                                          <script>
-                                          // ---------- Scene ----------
-                                          const scene = new THREE.Scene();
-                                          scene.background = new THREE.Color(0x87ceeb);
-                                          scene.fog = new THREE.Fog(0x87ceeb, 20, 70);
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; touch-action: none; font-family: sans-serif; }
+  canvas { display: block; }
+  #stick { position: fixed; left: 30px; bottom: 30px; width: 120px; height: 120px;
+           border-radius: 50%; background: rgba(255,255,255,.15); border: 2px solid rgba(255,255,255,.4); }
+  #knob { position: absolute; left: 40px; top: 40px; width: 40px; height: 40px;
+          border-radius: 50%; background: rgba(255,255,255,.6); }
+  #cross { position: fixed; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px;
+           border: 2px solid #fff; border-radius: 50%; opacity: .8; pointer-events: none; }
+  #start, #rotate { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex;
+           align-items: center; justify-content: center; color: #fff; font-size: 22px;
+           text-align: center; background: rgba(0,0,0,.85); z-index: 10; }
+  #rotate { display: none; z-index: 11; }
+  @media (orientation: portrait) { #rotate { display: flex; } }
+  #err { position: fixed; top: 0; left: 0; right: 0; color: #f66; font-size: 12px;
+         z-index: 20; padding: 6px; background: rgba(0,0,0,.7); }
+</style>
+</head>
+<body>
+<div id="stick"><div id="knob"></div></div>
+<div id="cross"></div>
+<div id="start">TAP TO START</div>
+<div id="rotate">Rotate your phone to landscape</div>
+<div id="err"></div>
+<script>
+const err = document.getElementById('err');
+window.onerror = (m, s, l) => { err.textContent += m + ' (line ' + l + ') '; };
 
-                                          const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 100);
-                                          camera.position.set(0, 1.6, 8);
-                                          camera.rotation.order = 'YXZ';
+// Fullscreen + landscape on tap
+document.getElementById('start').addEventListener('click', () => {
+  document.getElementById('start').style.display = 'none';
+  const el = document.documentElement;
+  const fs = el.requestFullscreen ? el.requestFullscreen() : null;
+  Promise.resolve(fs)
+    .then(() => screen.orientation && screen.orientation.lock && screen.orientation.lock('landscape'))
+    .catch(() => {});
+});
 
-                                          const renderer = new THREE.WebGLRenderer({ antialias: true });
-                                          renderer.setSize(innerWidth, innerHeight);
-                                          renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
-                                          document.body.appendChild(renderer.domElement);
+// Load Three.js with backups
+const SRCS = [
+  'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
+  'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js',
+  'https://unpkg.com/three@0.128.0/build/three.min.js'
+];
+function load(i) {
+  if (window.THREE) return init();
+  if (i >= SRCS.length) { err.textContent = 'Could not load Three.js - check your internet.'; return; }
+  const s = document.createElement('script');
+  s.src = SRCS[i];
+  s.onload = init;
+  s.onerror = () => load(i + 1);
+  document.head.appendChild(s);
+}
+load(0);
 
-                                          scene.add(new THREE.HemisphereLight(0xffffff, 0x556655, 0.9));
-                                          const sun = new THREE.DirectionalLight(0xffffff, 0.6);
-                                          sun.position.set(10, 20, 5);
-                                          scene.add(sun);
+function init() {
+  const scene = new THREE.Scene();
+  scene.background = new THREE.Color(0x87ceeb);
+  scene.fog = new THREE.Fog(0x87ceeb, 20, 70);
 
-                                          // ---------- World ----------
-                                          const floor = new THREE.Mesh(
-                                            new THREE.PlaneGeometry(60, 60),
-                                              new THREE.MeshLambertMaterial({ color: 0x4a7c3a })
-                                              );
-                                              floor.rotation.x = -Math.P
+  const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 100);
+  camera.position.set(0, 1.6, 8);
+  camera.rotation.order = 'YXZ';
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  document.body.appendChild(renderer.domElement);
+
+  scene.add(new THREE.HemisphereLight(0xffffff, 0x556655, 0.9));
+  const sun = new THREE.DirectionalLight(0xffffff, 0.6);
+  sun.position.set(10, 20, 5);
+  scene.add(sun);
+
+  const floor = new THREE.Mesh(
+    new THREE.PlaneGeometry(60, 60),
+    new THREE.MeshLambertMaterial({ color: 0x4a7c3a })
+  );
+  floor.rotation.x = -Math.PI / 2;
+  scene.add(floor);
+
+  function box(x, z, w, h, d, color) {
+    const m = new THREE.Mesh(
+      new THREE.BoxGeometry(w, h, d),
+      new THREE.MeshLambertMaterial({ color })
+    );
+    m.position.set(x, h / 2, z);
+    scene.add(m);
+  }
+  box(0, -30, 60, 4, 1, 0x888888);
+  box(0, 30, 60, 4, 1, 0x888888);
+  box(-30, 0, 1, 4, 60, 0x888888);
+  box(30, 0, 1, 4, 60, 0x888888);
+  box(-6, -4, 3, 2, 3, 0xaa6633);
+  box(7, -8, 4, 3, 2, 0x996644);
+  box(0, -14, 6, 2, 1, 0xbb7744);
+  box(-10, -18, 2, 4, 2, 0x777799);
+  box(12, 4, 2, 2, 2, 0xaa6633);
+
+  // Controls
+  const move = { x: 0, y: 0 };
+  let yaw = 0, pitch = 0;
+  const stick = document.getElementById('stick');
+  const knob = document.getElementById('knob');
+  let stickId = null, lookId = null, lastX = 0, lastY = 0;
+
+  function setKnob(dx, dy) {
+    const max = 40;
+    const len = Math.hypot(dx, dy);
+    if (len > max) { dx = dx / len * max; dy = dy / len * max; }
+    knob.style.left = (40 + dx) + 'px';
+    knob.style.top = (40 + dy) + 'px';
+    move.x = dx / max;
+    move.y = dy / max;
+  }
+  function stickMove(t) {
+    const r = stick.getBoundingClientRect();
+    setKnob(t.clientX - (r.left + r.width / 2), t.clientY - (r.top + r.height / 2));
+  }
+
+  addEventListener('touchstart', e => {
+    for (const t of e.changedTouches) {
+      if (t.clientX < innerWidth / 2 && stickId === null) {
+        stickId = t.identifier; stickMove(t);
+      } else if (t.clientX >= innerWidth / 2 && lookId === null) {
+        lookId = t.identifier; lastX = t.clientX; lastY = t.clientY;
+      }
+    }
+  }, { passive: false });
+
+  addEventListener('touchmove', e => {
+    e.preventDefault();
+    for (const t of e.changedTouches) {
+      if (t.identifier === stickId) {
+        stickMove(t);
+      } else if (t.identifier === lookId) {
+        yaw -= (t.clientX - lastX) * 0.005;
+        pitch -= (t.clientY - lastY) * 0.005;
+        pitch = Math.max(-1.4, Math.min(1.4, pitch));
+        lastX = t.clientX; lastY = t.clientY;
+      }
+    }
+  }, { passive: false });
+
+  addEventListener('touchend', e => {
+    for (const t of e.changedTouches) {
+      if (t.identifier === stickId) { stickId = null; setKnob(0, 0); }
+      if (t.identifier === lookId) lookId = null;
+    }
+  });
+
+  // Loop
+  const clock = new THREE.Clock();
+  const SPEED = 5, LIMIT = 28;
+
+  function animate() {
+    requestAnimationFrame(animate);
+    const dt = Math.min(clock.getDelta(), 0.05);
+    camera.rotation.y = yaw;
+    camera.rotation.x = pitch;
+    const fwd = -move.y, side = move.x;
+    camera.position.x += (-Math.sin(yaw) * fwd + Math.cos(yaw) * side) * SPEED * dt;
+    camera.position.z += (-Math.cos(yaw) * fwd - Math.sin(yaw) * side) * SPEED * dt;
+    camera.position.x = Math.max(-LIMIT, Math.min(LIMIT, camera.position.x));
+    camera.position.z = Math.max(-LIMIT, Math.min(LIMIT, camera.position.z));
+    renderer.render(scene, camera);
+  }
+  animate();
+
+  addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+}
+</script>
+</body>
+</html>
