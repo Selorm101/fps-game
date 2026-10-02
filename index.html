@@ -273,6 +273,16 @@ function init() {
     else if (dir === 'nx') { m.rotation.y = Math.PI; m.position.set(x0, 0, z0 + W / 2); r = { minX: x0 - len, maxX: x0, minZ: z0 - W / 2, maxZ: z0 + W / 2, h: (x, z) => (x0 - x) / len * H }; }
     else { m.rotation.y = -Math.PI / 2; m.position.set(x0 + W / 2, 0, z0); r = { minX: x0 - W / 2, maxX: x0 + W / 2, minZ: z0, maxZ: z0 + len, h: (x, z) => (z - z0) / len * H }; }
     addMesh(m, true); ramps.push(r);
+    const N = Math.max(2, Math.round(len));
+    for (let k = 0; k < N; k++) {
+      const f0 = k / N, f1 = (k + 1) / N;
+      let c;
+      if (dir === 'px') c = { minX: x0 + f0 * len, maxX: x0 + f1 * len, minZ: z0 - W / 2, maxZ: z0 + W / 2 };
+      else if (dir === 'nx') c = { minX: x0 - f1 * len, maxX: x0 - f0 * len, minZ: z0 - W / 2, maxZ: z0 + W / 2 };
+      else c = { minX: x0 - W / 2, maxX: x0 + W / 2, minZ: z0 + f0 * len, maxZ: z0 + f1 * len };
+      c.top = f0 * H;
+      colliders.push(c);
+    }
   }
   function riad(cx, cz, h, mi) {
     const seg = (x, z, w, d) => { addBox(x, z, w, h, d, bMats[mi]); surf(x, z, w, d, h); };
@@ -342,6 +352,13 @@ function init() {
     return g;
   }
 
+  function embedded(x, z, y) {
+    for (const b of colliders) {
+      if (b.top > y + 0.5 && x > b.minX && x < b.maxX && z > b.minZ && z < b.maxZ) return true;
+    }
+    return false;
+  }
+
   // ---------- Pathfinding grid ----------
   const G = 60, OFF = 30;
   const walk = new Uint8Array(G * G), dist = new Int16Array(G * G), q = new Int16Array(G * G);
@@ -370,7 +387,7 @@ function init() {
 
   // ---------- Player state ----------
   const PR = 0.45;
-  let hp = 100, dead = false, t = 0, lastHurt = -99, hurtOp = 0, score = 0, gy = 0, flowT = 0;
+  let hp = 100, dead = false, t = 0, lastHurt = -99, hurtOp = 0, score = 0, gy = 0, flowT = 0, safeX = 0, safeZ = 14;
   let yaw = 0, pitch = 0, firing = false;
   const scoreEl = document.getElementById('score');
   const hpFill = document.getElementById('hpfill');
@@ -587,6 +604,9 @@ function init() {
       const tg = groundAt(camera.position.x, camera.position.z, gy);
       gy += (tg - gy) * Math.min(1, 12 * dt);
       camera.position.y = 1.6 + gy;
+      if (embedded(camera.position.x, camera.position.z, gy)) {
+        camera.position.x = safeX; camera.position.z = safeZ;
+      } else { safeX = camera.position.x; safeZ = camera.position.z; }
 
       cooldown -= dt;
       if (firing && cooldown <= 0) { shoot(); cooldown = 0.12; }
