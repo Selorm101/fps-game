@@ -3,16 +3,21 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<title>FPS Stage 1</title>
+<title>FPS Stage 2</title>
 <style>
-  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; touch-action: none; font-family: sans-serif; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #000; touch-action: none; font-family: sans-serif; user-select: none; -webkit-user-select: none; }
   canvas { display: block; }
   #stick { position: fixed; left: 30px; bottom: 30px; width: 120px; height: 120px;
            border-radius: 50%; background: rgba(255,255,255,.15); border: 2px solid rgba(255,255,255,.4); }
   #knob { position: absolute; left: 40px; top: 40px; width: 40px; height: 40px;
           border-radius: 50%; background: rgba(255,255,255,.6); }
   #cross { position: fixed; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px;
-           border: 2px solid #fff; border-radius: 50%; opacity: .8; pointer-events: none; }
+           border: 2px solid #fff; border-radius: 50%; opacity: .9; pointer-events: none; }
+  #fire { position: fixed; right: 40px; bottom: 30px; width: 100px; height: 100px; border-radius: 50%;
+          background: rgba(255,60,60,.35); border: 3px solid rgba(255,255,255,.6);
+          display: flex; align-items: center; justify-content: center; color: #fff; font-size: 16px; font-weight: bold; }
+  #score { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); color: #fff;
+           font-size: 18px; text-shadow: 0 1px 3px #000; pointer-events: none; }
   #start, #rotate { position: fixed; top: 0; left: 0; right: 0; bottom: 0; display: flex;
            align-items: center; justify-content: center; color: #fff; font-size: 22px;
            text-align: center; background: rgba(0,0,0,.85); z-index: 10; }
@@ -25,6 +30,8 @@
 <body>
 <div id="stick"><div id="knob"></div></div>
 <div id="cross"></div>
+<div id="fire">FIRE</div>
+<div id="score">Hits: 0</div>
 <div id="start">TAP TO START</div>
 <div id="rotate">Rotate your phone to landscape</div>
 <div id="err"></div>
@@ -32,7 +39,6 @@
 const err = document.getElementById('err');
 window.onerror = (m, s, l) => { err.textContent += m + ' (line ' + l + ') '; };
 
-// Fullscreen + landscape on tap
 document.getElementById('start').addEventListener('click', () => {
   document.getElementById('start').style.display = 'none';
   const el = document.documentElement;
@@ -42,7 +48,6 @@ document.getElementById('start').addEventListener('click', () => {
     .catch(() => {});
 });
 
-// Load Three.js with backups
 const SRCS = [
   'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js',
   'https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js',
@@ -67,6 +72,7 @@ function init() {
   const camera = new THREE.PerspectiveCamera(75, innerWidth / innerHeight, 0.1, 100);
   camera.position.set(0, 1.6, 8);
   camera.rotation.order = 'YXZ';
+  scene.add(camera);
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setSize(innerWidth, innerHeight);
@@ -78,12 +84,15 @@ function init() {
   sun.position.set(10, 20, 5);
   scene.add(sun);
 
+  const shootables = [];
+
   const floor = new THREE.Mesh(
     new THREE.PlaneGeometry(60, 60),
     new THREE.MeshLambertMaterial({ color: 0x4a7c3a })
   );
   floor.rotation.x = -Math.PI / 2;
   scene.add(floor);
+  shootables.push(floor);
 
   function box(x, z, w, h, d, color) {
     const m = new THREE.Mesh(
@@ -92,6 +101,7 @@ function init() {
     );
     m.position.set(x, h / 2, z);
     scene.add(m);
+    shootables.push(m);
   }
   box(0, -30, 60, 4, 1, 0x888888);
   box(0, 30, 60, 4, 1, 0x888888);
@@ -103,12 +113,111 @@ function init() {
   box(-10, -18, 2, 4, 2, 0x777799);
   box(12, 4, 2, 2, 2, 0xaa6633);
 
+  // Targets
+  const targets = [];
+  const spots = [[-8, -10], [5, -15], [14, -6], [-14, -22], [0, -24]];
+  spots.forEach(p => {
+    const t = new THREE.Mesh(
+      new THREE.SphereGeometry(0.7, 16, 12),
+      new THREE.MeshLambertMaterial({ color: 0xdd2222 })
+    );
+    t.position.set(p[0], 1.4, p[1]);
+    t.userData.target = true;
+    t.userData.hp = 3;
+    scene.add(t);
+    shootables.push(t);
+    targets.push(t);
+  });
+
+  // Gun
+  const gun = new THREE.Mesh(
+    new THREE.BoxGeometry(0.08, 0.1, 0.5),
+    new THREE.MeshLambertMaterial({ color: 0x222222 })
+  );
+  gun.position.set(0.22, -0.22, -0.5);
+  camera.add(gun);
+  const flash = new THREE.Mesh(
+    new THREE.SphereGeometry(0.07, 8, 8),
+    new THREE.MeshBasicMaterial({ color: 0xffdd55 })
+  );
+  flash.position.set(0.22, -0.2, -0.82);
+  flash.visible = false;
+  camera.add(flash);
+
+  // Sound
+  let ac = null;
+  function beep() {
+    try {
+      ac = ac || new (window.AudioContext || window.webkitAudioContext)();
+      const o = ac.createOscillator(), g = ac.createGain();
+      o.type = 'square';
+      o.frequency.setValueAtTime(300, ac.currentTime);
+      o.frequency.exponentialRampToValueAtTime(60, ac.currentTime + 0.08);
+      g.gain.setValueAtTime(0.15, ac.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + 0.1);
+      o.connect(g); g.connect(ac.destination);
+      o.start(); o.stop(ac.currentTime + 0.1);
+    } catch (e) {}
+  }
+
+  // Shooting
+  const ray = new THREE.Raycaster();
+  const cross = document.getElementById('cross');
+  const scoreEl = document.getElementById('score');
+  let score = 0;
+  const sparkGeo = new THREE.SphereGeometry(0.08, 6, 6);
+  const sparkMat = new THREE.MeshBasicMaterial({ color: 0xffee88 });
+
+  function spark(point) {
+    const s = new THREE.Mesh(sparkGeo, sparkMat);
+    s.position.copy(point);
+    scene.add(s);
+    setTimeout(() => scene.remove(s), 150);
+  }
+
+  function respawn(t) {
+    t.position.set((Math.random() - 0.5) * 44, 1.4, (Math.random() - 0.5) * 44);
+    t.userData.hp = 3;
+    t.visible = true;
+    shootables.push(t);
+  }
+
+  function hitTarget(t) {
+    t.userData.hp--;
+    cross.style.borderColor = '#ff3333';
+    setTimeout(() => { cross.style.borderColor = '#fff'; }, 100);
+    t.material.emissive.setHex(0xffffff);
+    setTimeout(() => t.material.emissive.setHex(0x000000), 60);
+    if (t.userData.hp <= 0) {
+      t.visible = false;
+      shootables.splice(shootables.indexOf(t), 1);
+      score++;
+      scoreEl.textContent = 'Hits: ' + score;
+      setTimeout(() => respawn(t), 2000);
+    }
+  }
+
+  function shoot() {
+    gun.position.z = -0.38;
+    flash.visible = true;
+    setTimeout(() => { flash.visible = false; }, 40);
+    beep();
+    ray.setFromCamera({ x: 0, y: 0 }, camera);
+    const hits = ray.intersectObjects(shootables, false);
+    if (hits.length) {
+      const h = hits[0];
+      if (h.object.userData.target) hitTarget(h.object);
+      spark(h.point);
+    }
+  }
+
   // Controls
   const move = { x: 0, y: 0 };
   let yaw = 0, pitch = 0;
   const stick = document.getElementById('stick');
   const knob = document.getElementById('knob');
-  let stickId = null, lookId = null, lastX = 0, lastY = 0;
+  let stickId = null, lookId = null, fireId = null, lastX = 0, lastY = 0;
+  let firing = false;
 
   function setKnob(dx, dy) {
     const max = 40;
@@ -126,7 +235,9 @@ function init() {
 
   addEventListener('touchstart', e => {
     for (const t of e.changedTouches) {
-      if (t.clientX < innerWidth / 2 && stickId === null) {
+      if (t.target.id === 'fire') {
+        if (fireId === null) { fireId = t.identifier; firing = true; }
+      } else if (t.clientX < innerWidth / 2 && stickId === null) {
         stickId = t.identifier; stickMove(t);
       } else if (t.clientX >= innerWidth / 2 && lookId === null) {
         lookId = t.identifier; lastX = t.clientX; lastY = t.clientY;
@@ -152,12 +263,14 @@ function init() {
     for (const t of e.changedTouches) {
       if (t.identifier === stickId) { stickId = null; setKnob(0, 0); }
       if (t.identifier === lookId) lookId = null;
+      if (t.identifier === fireId) { fireId = null; firing = false; }
     }
   });
 
   // Loop
   const clock = new THREE.Clock();
   const SPEED = 5, LIMIT = 28;
+  let cooldown = 0;
 
   function animate() {
     requestAnimationFrame(animate);
@@ -169,6 +282,11 @@ function init() {
     camera.position.z += (-Math.cos(yaw) * fwd - Math.sin(yaw) * side) * SPEED * dt;
     camera.position.x = Math.max(-LIMIT, Math.min(LIMIT, camera.position.x));
     camera.position.z = Math.max(-LIMIT, Math.min(LIMIT, camera.position.z));
+
+    cooldown -= dt;
+    if (firing && cooldown <= 0) { shoot(); cooldown = 0.12; }
+    gun.position.z += (-0.5 - gun.position.z) * Math.min(1, 12 * dt);
+
     renderer.render(scene, camera);
   }
   animate();
